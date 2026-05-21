@@ -65,7 +65,7 @@
         </select>
 
         <div class="search-wrapper">
-            <input type="text" id="opening-search" name="opening-search" list="openings-list" placeholder="Search thousands of openings...">
+            <input type="text" id="opening-search" autocomplete="new-opening" list="openings-list" placeholder="Search thousands of openings...">
             <datalist id="openings-list"></datalist>
         </div>
         
@@ -102,6 +102,20 @@
         let selectedSquare = null;
         let openingPositionFen = null;
         let userColor = 'white'; let isSignUpMode = true;
+        let openingsLoaded = false;
+        let searchListenerAdded = false;
+
+        function initBoard() {
+            if (board) return;
+            board = Chessboard('myBoard', {
+                draggable: true,
+                position: 'start',
+                onDrop: onDrop,
+                onSquareClick: onSquareClick,
+                onSnapEnd: () => board.position(game.fen()),
+                pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
+            });
+        }
 
         // Auth Logic
         function openModal() { document.getElementById('authModal').style.display = 'block'; }
@@ -133,7 +147,12 @@
         });
 
         async function initApp() {
+            if (openingsLoaded) return;
+            openingsLoaded = true;
+
             const statusBox = document.getElementById('status-box');
+            const datalist = document.getElementById('openings-list');
+            datalist.innerHTML = '';
             openingDictionary.clear();
 
             // Fetch ALL openings from your table (No bouncer restrictions)
@@ -142,6 +161,9 @@
                 dbOpenings.forEach(op => {
                     const label = `⭐ ${op.variation_name}`;
                     openingDictionary.set(label, { type: 'custom', data: op });
+                    const opt = document.createElement('option');
+                    opt.value = label;
+                    datalist.appendChild(opt);
                 });
             }
 
@@ -155,18 +177,31 @@
                         if (r.length < 5 || r[0] === 'eco') return;
                         const label = `${r[1]} [${r[0]}]`;
                         openingDictionary.set(label, { type: 'eco', eco: r[0], name: r[1], pgn: r[2], uci: r[3], epd: r[4] });
+                        const opt = document.createElement('option');
+                        opt.value = label;
+                        datalist.appendChild(opt);
                     });
                 } catch(e) { console.warn(`Failed to load ECO file ${v}.tsv:`, e); }
             }));
             const total = openingDictionary.size;
             statusBox.innerText = `${total.toLocaleString()} openings loaded. Search to begin.`;
 
-            if (!board) {
-                board = Chessboard('myBoard', { 
-                    draggable: true, position: 'start', onDrop: onDrop,
-                    onSquareClick: onSquareClick,
-                    onSnapEnd: () => board.position(game.fen()),
-                    pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png' 
+            if (!searchListenerAdded) {
+                searchListenerAdded = true;
+                document.getElementById('opening-search').addEventListener('input', function () {
+                    const query = this.value.trim().toLowerCase();
+                    const datalist = document.getElementById('openings-list');
+                    datalist.innerHTML = '';
+                    if (query.length < 2) return;
+                    let count = 0;
+                    for (const key of openingDictionary.keys()) {
+                        if (key.toLowerCase().includes(query)) {
+                            const opt = document.createElement('option');
+                            opt.value = key;
+                            datalist.appendChild(opt);
+                            if (++count >= 40) break;
+                        }
+                    }
                 });
             }
         }
@@ -349,33 +384,9 @@
             else promptUser();
         }
 
-        document.addEventListener('DOMContentLoaded', async () => {
-            await initApp();
-
-            document.getElementById('opening-search').addEventListener('input', function() {
-                const query = this.value.trim().toLowerCase();
-                const datalist = document.getElementById('openings-list');
-                datalist.innerHTML = '';
-                if (query.length < 2) return;
-                let count = 0;
-                for (const key of openingDictionary.keys()) {
-                    if (key.toLowerCase().includes(query)) {
-                        const opt = document.createElement('option');
-                        opt.value = key;
-                        datalist.appendChild(opt);
-                        if (++count >= 40) break;
-                    }
-                }
-            });
-
-            if (!board) {
-                board = Chessboard('myBoard', {
-                    draggable: true, position: 'start', onDrop: onDrop,
-                    onSquareClick: onSquareClick,
-                    onSnapEnd: () => board.position(game.fen()),
-                    pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
-                });
-            }
+        document.addEventListener('DOMContentLoaded', () => {
+            initBoard();
+            initApp();
         });
     </script>
 </body>
